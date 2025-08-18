@@ -1,0 +1,927 @@
+import React, { useState, useEffect } from 'react';
+import { initializeApp } from 'firebase/app';
+import { getAuth, signInWithCustomToken, signInAnonymously } from 'firebase/auth';
+import { getFirestore, collection, onSnapshot, doc, getDoc, setDoc, addDoc, deleteDoc, updateDoc } from 'firebase/firestore';
+
+// Komponen ikon dari lucide-react
+const LogIn = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" /><polyline points="10 17 15 12 10 7" /><line x1="15" y1="12" x2="3" y2="12" />
+  </svg>
+);
+const Home = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><polyline points="9 22 9 12 15 12 15 22" />
+  </svg>
+);
+const User = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" /><circle cx="12" cy="7" r="4" />
+  </svg>
+);
+const QrCode = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect x="3" y="3" width="7" height="7" rx="1" /><rect x="14" y="3" width="7" height="7" rx="1" /><rect x="3" y="14" width="7" height="7" rx="1" /><path d="M21 15h-4a2 2 0 0 0-2 2v4" /><path d="M12 17v.01" /><path d="M12 13v.01" /><path d="M16 17v.01" /><path d="M16 13v.01" /><path d="M21 21v-4a2 2 0 0 0-2-2h-4" /><path d="M12 21v.01" /><path d="M12 19v.01" /><path d="M16 21v.01" /><path d="M19 12h.01" /><path d="M19 16h.01" /><path d="M19 19h.01" />
+  </svg>
+);
+const Users = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" />
+  </svg>
+);
+const Table = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 12V2H2v10a2 2 0 0 0 2 2h14v1a2 2 0 0 1-2 2v3a2 2 0 0 1 2 2h4V14a2 2 0 0 0 2-2z" />
+  </svg>
+);
+const FileText = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.414A1 1 0 0 0 18.293 6.707L15.293 3.707A1 1 0 0 0 15 2z" /><path d="M14 2v4a2 2 0 0 0 2 2h4" /><line x1="16" y1="13" x2="8" y2="13" /><line x1="16" y1="17" x2="8" y2="17" /><line x1="10" y1="9" x2="8" y2="9" />
+  </svg>
+);
+const Import = (props) => (
+  <svg {...props} xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 3v18" /><path d="M8 7l4-4 4 4" /><path d="M3 15h2" /><path d="M5 19H3" /><path d="M21 15h-2" /><path d="M19 19h2" />
+  </svg>
+);
+
+// Fungsi untuk menghasilkan ID unik
+const generateId = () => `id-${Math.random().toString(36).substr(2, 9)}`;
+
+// Data sekolah
+const schoolData = {
+  name: "SMAN 1 LECES",
+  academicYear: "2025-2026",
+  semester: "Ganjil",
+  subject: "Informatika",
+  teacher: "Edy purwantono, S.Pd., S.Kom, M.Pd"
+};
+
+// Data awal (akan diganti dengan data dari Firestore)
+const initialStudents = [
+  { id: 'siswa-01', name: 'Budi Santoso', classId: 'X.1', qrCode: 'QR-Budi-Santoso' },
+  { id: 'siswa-02', name: 'Siti Rahmawati', classId: 'X.2', qrCode: 'QR-Siti-Rahmawati' },
+];
+const initialClasses = [
+  { id: 'X.1', name: 'Kelas X.1' },
+  { id: 'X.2', name: 'Kelas X.2' },
+  { id: 'XI.3', name: 'Kelas XI.3' },
+  { id: 'XI.4', name: 'Kelas XI.4' },
+  { id: 'XI.5', name: 'Kelas XI.5' },
+  { id: 'XII.3', name: 'Kelas XII.3' },
+  { id: 'XII.4', name: 'Kelas XII.4' },
+  { id: 'XII.5', name: 'Kelas XII.5' },
+];
+const initialStaff = [
+  { id: 'petugas-01', name: 'Edy purwantono', username: 'edy', password: '123', role: 'superadmin' },
+  { id: 'petugas-02', name: 'Ani', username: 'ani', password: '123', role: 'admin' },
+];
+const initialAttendance = [];
+
+// Fungsi untuk mensimulasikan notifikasi WhatsApp
+const simulateWhatsAppNotification = (studentName) => {
+  console.log(`[SIMULASI] Notifikasi WhatsApp terkirim ke ${studentName}: Presensi berhasil dicatat.`);
+  // Implementasi nyata memerlukan API Gateway dan API WhatsApp resmi (tidak dapat dilakukan di frontend ini)
+};
+
+// Komponen utama aplikasi
+const App = () => {
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState(null);
+  const [db, setDb] = useState(null);
+  const [appId, setAppId] = useState(null);
+
+  const [view, setView] = useState('login');
+  const [students, setStudents] = useState(initialStudents);
+  const [classes, setClasses] = useState(initialClasses);
+  const [staff, setStaff] = useState(initialStaff);
+  const [attendance, setAttendance] = useState(initialAttendance);
+  const [message, setMessage] = useState('');
+  
+  // State untuk form
+  const [newStudent, setNewStudent] = useState({ name: '', classId: '' });
+  const [editStudent, setEditStudent] = useState(null);
+  const [newClass, setNewClass] = useState({ name: '' });
+  const [editClass, setEditClass] = useState(null);
+  const [newStaff, setNewStaff] = useState({ name: '', username: '', password: '', role: 'admin' });
+  const [editStaff, setEditStaff] = useState(null);
+  const [editAttendance, setEditAttendance] = useState(null);
+
+  // Inisialisasi Firebase & autentikasi
+  useEffect(() => {
+    try {
+      // Pastikan variabel global ada sebelum digunakan
+      const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+      const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+      const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+      if (Object.keys(firebaseConfig).length > 0) {
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const firestoreDb = getFirestore(app);
+        setDb(firestoreDb);
+        setAppId(appId);
+
+        const signIn = async () => {
+          try {
+            if (initialAuthToken) {
+              await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+              await signInAnonymously(auth);
+            }
+            setUser(auth.currentUser);
+            setAuthReady(true);
+          } catch (error) {
+            console.error("Firebase Auth error:", error);
+            setMessage("Gagal terhubung ke database. Coba lagi.");
+          }
+        };
+        signIn();
+      } else {
+        console.error("Firebase config is missing. Running in mock mode.");
+        setAuthReady(true); // Lanjutkan dengan data mock jika Firebase tidak tersedia
+      }
+    } catch (e) {
+      console.error("Error initializing Firebase:", e);
+      setAuthReady(true); // Lanjutkan dengan data mock jika terjadi error
+    }
+  }, []);
+
+  // Ambil data dari Firestore
+  useEffect(() => {
+    if (!db || !user || !appId) return;
+
+    const userId = user.uid;
+    const studentsCollection = collection(db, `artifacts/${appId}/users/${userId}/students`);
+    const classesCollection = collection(db, `artifacts/${appId}/users/${userId}/classes`);
+    const attendanceCollection = collection(db, `artifacts/${appId}/users/${userId}/attendance`);
+
+    // Listener untuk siswa
+    const studentsUnsubscribe = onSnapshot(studentsCollection, (snapshot) => {
+      const studentList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setStudents(studentList);
+    });
+
+    // Listener untuk kelas
+    const classesUnsubscribe = onSnapshot(classesCollection, (snapshot) => {
+      const classList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setClasses(classList);
+    });
+
+    // Listener untuk kehadiran
+    const attendanceUnsubscribe = onSnapshot(attendanceCollection, (snapshot) => {
+      const attendanceList = snapshot.docs.map(doc => ({ ...doc.data(), id: doc.id }));
+      setAttendance(attendanceList);
+    });
+
+    return () => {
+      studentsUnsubscribe();
+      classesUnsubscribe();
+      attendanceUnsubscribe();
+    };
+  }, [db, user, appId]);
+
+  // Handle login petugas
+  const handleLogin = (e) => {
+    e.preventDefault();
+    const username = e.target.username.value;
+    const password = e.target.password.value;
+    const authenticatedUser = initialStaff.find(
+      u => u.username === username && u.password === password
+    );
+    if (authenticatedUser) {
+      setUser({ ...authenticatedUser, uid: user.uid }); // Gabungkan data user mock dengan UID Firestore
+      setView('dashboard');
+    } else {
+      setMessage('Username atau password salah.');
+    }
+  };
+
+  // CRUD Siswa
+  const handleAddStudent = async (e) => {
+    e.preventDefault();
+    if (!newStudent.name || !newStudent.classId) {
+      setMessage('Nama dan kelas wajib diisi.');
+      return;
+    }
+    const studentData = { ...newStudent, qrCode: `QR-${newStudent.name.replace(/\s/g, '-')}-${generateId()}` };
+    if (db && user) {
+      const studentsCollection = collection(db, `artifacts/${appId}/users/${user.uid}/students`);
+      await addDoc(studentsCollection, studentData);
+      setMessage('Siswa berhasil ditambahkan.');
+      setNewStudent({ name: '', classId: '' });
+    } else {
+      setStudents([...students, { ...studentData, id: generateId() }]);
+      setMessage('Siswa berhasil ditambahkan (mode mock).');
+    }
+  };
+
+  const handleDeleteStudent = async (studentId) => {
+    if (window.confirm("Apakah Anda yakin ingin menghapus siswa ini?")) {
+      if (db && user) {
+        const studentDoc = doc(db, `artifacts/${appId}/users/${user.uid}/students`, studentId);
+        await deleteDoc(studentDoc);
+        setMessage('Siswa berhasil dihapus.');
+      } else {
+        setStudents(students.filter(s => s.id !== studentId));
+        setMessage('Siswa berhasil dihapus (mode mock).');
+      }
+    }
+  };
+
+  const handleUpdateStudent = async (e) => {
+    e.preventDefault();
+    if (!editStudent.name || !editStudent.classId) {
+      setMessage('Nama dan kelas wajib diisi.');
+      return;
+    }
+    if (db && user) {
+      const studentDoc = doc(db, `artifacts/${appId}/users/${user.uid}/students`, editStudent.id);
+      await updateDoc(studentDoc, { name: editStudent.name, classId: editStudent.classId });
+      setMessage('Siswa berhasil diubah.');
+      setEditStudent(null);
+    } else {
+      setStudents(students.map(s => s.id === editStudent.id ? editStudent : s));
+      setMessage('Siswa berhasil diubah (mode mock).');
+      setEditStudent(null);
+    }
+  };
+
+  // CRUD Kelas
+  const handleAddClass = async (e) => {
+    e.preventDefault();
+    if (!newClass.name) {
+      setMessage('Nama kelas wajib diisi.');
+      return;
+    }
+    if (db && user) {
+      const classesCollection = collection(db, `artifacts/${appId}/users/${user.uid}/classes`);
+      await addDoc(classesCollection, newClass);
+      setMessage('Kelas berhasil ditambahkan.');
+      setNewClass({ name: '' });
+    } else {
+      setClasses([...classes, { ...newClass, id: generateId() }]);
+      setMessage('Kelas berhasil ditambahkan (mode mock).');
+    }
+  };
+
+  const handleDeleteClass = async (classId) => {
+    if (window.confirm("Apakah Anda yakin ingin menghapus kelas ini?")) {
+      if (db && user) {
+        const classDoc = doc(db, `artifacts/${appId}/users/${user.uid}/classes`, classId);
+        await deleteDoc(classDoc);
+        setMessage('Kelas berhasil dihapus.');
+      } else {
+        setClasses(classes.filter(c => c.id !== classId));
+        setMessage('Kelas berhasil dihapus (mode mock).');
+      }
+    }
+  };
+
+  const handleUpdateClass = async (e) => {
+    e.preventDefault();
+    if (!editClass.name) {
+      setMessage('Nama kelas wajib diisi.');
+      return;
+    }
+    if (db && user) {
+      const classDoc = doc(db, `artifacts/${appId}/users/${user.uid}/classes`, editClass.id);
+      await updateDoc(classDoc, { name: editClass.name });
+      setMessage('Kelas berhasil diubah.');
+      setEditClass(null);
+    } else {
+      setClasses(classes.map(c => c.id === editClass.id ? editClass : c));
+      setMessage('Kelas berhasil diubah (mode mock).');
+      setEditClass(null);
+    }
+  };
+
+  // CRUD Petugas (khusus superadmin)
+  const handleAddStaff = async (e) => {
+    e.preventDefault();
+    if (!newStaff.name || !newStaff.username || !newStaff.password) {
+      setMessage('Nama, username, dan password wajib diisi.');
+      return;
+    }
+    // Catatan: Dalam implementasi nyata, petugas akan disimpan di koleksi terpisah dan bukan di path pribadi
+    // Ini hanyalah simulasi untuk demo
+    setStaff([...staff, { ...newStaff, id: generateId() }]);
+    setMessage('Petugas berhasil ditambahkan (simulasi).');
+    setNewStaff({ name: '', username: '', password: '', role: 'admin' });
+  };
+
+  const handleDeleteStaff = (staffId) => {
+    if (window.confirm("Apakah Anda yakin ingin menghapus petugas ini?")) {
+      setStaff(staff.filter(s => s.id !== staffId));
+      setMessage('Petugas berhasil dihapus (simulasi).');
+    }
+  };
+
+  const handleUpdateStaff = (e) => {
+    e.preventDefault();
+    setStaff(staff.map(s => s.id === editStaff.id ? editStaff : s));
+    setMessage('Petugas berhasil diubah (simulasi).');
+    setEditStaff(null);
+  };
+
+  // Manajemen Absensi
+  const handleScanQR = async (studentId) => {
+    const student = students.find(s => s.id === studentId);
+    if (!student) {
+      setMessage('QR Code tidak valid.');
+      return;
+    }
+    
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const attendanceData = {
+      studentId: student.id,
+      studentName: student.name,
+      classId: student.classId,
+      date: today,
+      time: now.toLocaleTimeString(),
+      status: 'Hadir'
+    };
+    
+    if (db && user) {
+      const attendanceDocRef = doc(db, `artifacts/${appId}/users/${user.uid}/attendance`, `${today}-${student.id}`);
+      await setDoc(attendanceDocRef, attendanceData);
+      setMessage(`Kehadiran ${student.name} berhasil dicatat.`);
+    } else {
+      setAttendance([...attendance, { ...attendanceData, id: generateId() }]);
+      setMessage(`Kehadiran ${student.name} berhasil dicatat (mode mock).`);
+    }
+
+    simulateWhatsAppNotification(student.name);
+  };
+
+  const handleUpdateAttendance = async (e) => {
+    e.preventDefault();
+    if (db && user) {
+      const attendanceDoc = doc(db, `artifacts/${appId}/users/${user.uid}/attendance`, editAttendance.id);
+      await updateDoc(attendanceDoc, { status: editAttendance.status });
+      setMessage('Data absensi berhasil diubah.');
+      setEditAttendance(null);
+    } else {
+      setAttendance(attendance.map(a => a.id === editAttendance.id ? editAttendance : a));
+      setMessage('Data absensi berhasil diubah (mode mock).');
+      setEditAttendance(null);
+    }
+  };
+  
+  // Simulasi generate laporan
+  const generateReport = () => {
+    console.log("Simulasi: Laporan PDF dibuat.");
+    setMessage('Laporan PDF berhasil dibuat (simulasi).');
+  };
+
+  // Simulasi import CSV
+  const importCSV = () => {
+    console.log("Simulasi: File CSV diimpor.");
+    setMessage('Data siswa dari CSV berhasil diimpor (simulasi).');
+  };
+
+  // Render halaman berdasarkan 'view'
+  const renderPage = () => {
+    if (!authReady) {
+      return (
+        <div className="flex justify-center items-center h-screen bg-gray-100">
+          <div className="text-center p-8 rounded-xl shadow-lg bg-white">
+            <h1 className="text-3xl font-bold mb-4 text-slate-800 animate-pulse">Memuat...</h1>
+          </div>
+        </div>
+      );
+    }
+
+    if (view === 'login' || !user || !user.role) {
+      return (
+        <div className="flex justify-center items-center h-screen bg-blue-50">
+          <div className="w-full max-w-sm p-8 bg-white rounded-xl shadow-lg">
+            <h1 className="text-2xl font-bold mb-6 text-center text-slate-800">Login Petugas</h1>
+            <form onSubmit={handleLogin} className="space-y-4">
+              <input
+                type="text"
+                name="username"
+                placeholder="Username"
+                className="w-full p-3 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
+              <input
+                type="password"
+                name="password"
+                placeholder="Password"
+                className="w-full p-3 rounded-md border border-gray-300 focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
+              />
+              <button
+                type="submit"
+                className="w-full bg-blue-600 text-white font-semibold py-3 rounded-md hover:bg-blue-700 transition-colors"
+              >
+                Masuk
+              </button>
+            </form>
+            {message && (
+              <p className="mt-4 text-center text-sm font-medium text-red-500">{message}</p>
+            )}
+          </div>
+        </div>
+      );
+    }
+
+    // Dashboard dan halaman lainnya
+    return (
+      <div className="flex h-screen bg-blue-50 text-slate-800 font-inter">
+        {/* Sidebar */}
+        <aside className="w-64 bg-white p-6 shadow-md rounded-r-xl overflow-y-auto">
+          <div className="flex items-center mb-8">
+            <h2 className="text-xl font-bold text-blue-600">Absensi SMAN 1</h2>
+          </div>
+          <p className="text-sm text-gray-500 mb-4">A/P: {schoolData.academicYear}</p>
+          <p className="text-sm text-gray-500 mb-4">Guru: {schoolData.teacher}</p>
+
+          <nav className="space-y-2">
+            <button onClick={() => setView('dashboard')} className={`w-full flex items-center p-3 rounded-lg transition-colors ${view === 'dashboard' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <Home className="mr-3" /> Dashboard
+            </button>
+            <button onClick={() => setView('scan')} className={`w-full flex items-center p-3 rounded-lg transition-colors ${view === 'scan' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <QrCode className="mr-3" /> Scan QR
+            </button>
+            <button onClick={() => setView('students')} className={`w-full flex items-center p-3 rounded-lg transition-colors ${view === 'students' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <Users className="mr-3" /> Siswa & QR
+            </button>
+            <button onClick={() => setView('classes')} className={`w-full flex items-center p-3 rounded-lg transition-colors ${view === 'classes' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <Table className="mr-3" /> Kelas
+            </button>
+            <button onClick={() => setView('attendance')} className={`w-full flex items-center p-3 rounded-lg transition-colors ${view === 'attendance' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <FileText className="mr-3" /> Absensi
+            </button>
+            <button onClick={() => setView('import')} className={`w-full flex items-center p-3 rounded-lg transition-colors ${view === 'import' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+              <Import className="mr-3" /> Import Siswa
+            </button>
+            {user.role === 'superadmin' && (
+              <button onClick={() => setView('staff')} className={`w-full flex items-center p-3 rounded-lg transition-colors ${view === 'staff' ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+                <User className="mr-3" /> Manajemen Petugas
+              </button>
+            )}
+            <button onClick={() => setView('login')} className="w-full flex items-center p-3 rounded-lg text-gray-600 hover:bg-red-100 hover:text-red-600 transition-colors">
+              <LogIn className="mr-3" /> Keluar
+            </button>
+          </nav>
+        </aside>
+
+        {/* Konten Utama */}
+        <main className="flex-1 p-8 overflow-y-auto">
+          {message && (
+            <div className="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded relative mb-6" role="alert">
+              <span className="block sm:inline">{message}</span>
+              <span className="absolute top-0 bottom-0 right-0 px-4 py-3 cursor-pointer" onClick={() => setMessage('')}>
+                <svg className="fill-current h-6 w-6 text-green-500" role="button" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><title>Close</title><path d="M14.348 14.849a1.2 1.2 0 0 1-1.697 0L10 11.819l-2.651 3.03a1.2 1.2 0 1 1-1.697-1.697l2.758-3.15-2.759-3.152a1.2 1.2 0 1 1 1.697-1.697L10 8.183l2.651-3.031a1.2 1.2 0 1 1 1.697 1.697l-2.758 3.152 2.758 3.15a1.2 1.2 0 0 1 0 1.698z"/></svg>
+              </span>
+            </div>
+          )}
+
+          {/* Dashboard View */}
+          {view === 'dashboard' && (
+            <div>
+              <h1 className="text-3xl font-bold mb-6 text-slate-800">Dashboard</h1>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-2 text-gray-600">Total Siswa</h3>
+                  <p className="text-4xl font-bold text-blue-600">{students.length}</p>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-2 text-gray-600">Total Kelas</h3>
+                  <p className="text-4xl font-bold text-blue-600">{classes.length}</p>
+                </div>
+                <div className="bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+                  <h3 className="text-lg font-semibold mb-2 text-gray-600">Presensi Hari Ini</h3>
+                  <p className="text-4xl font-bold text-blue-600">{attendance.filter(a => a.date === new Date().toISOString().split('T')[0]).length}</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Scan QR View */}
+          {view === 'scan' && (
+            <div>
+              <h1 className="text-3xl font-bold mb-6">Scan QR Code</h1>
+              <div className="bg-white p-6 rounded-xl shadow-lg flex flex-col items-center">
+                <div className="bg-gray-200 w-full h-80 rounded-xl flex items-center justify-center mb-6 text-gray-500">
+                  <p>
+                    <span className="font-bold">SIMULASI:</span> Pemindai QR akan berada di sini.
+                  </p>
+                </div>
+                <select className="w-full p-3 rounded-md border border-gray-300 mb-4">
+                  <option value="">Pilih siswa untuk simulasi scan</option>
+                  {students.map(student => (
+                    <option key={student.id} value={student.id}>{student.name}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={() => handleScanQR(document.querySelector('select').value)}
+                  className="w-full bg-blue-600 text-white font-semibold py-3 rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  Simulasikan Scan QR
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Student & QR View */}
+          {view === 'students' && (
+            <div>
+              <h1 className="text-3xl font-bold mb-6">Manajemen Siswa & QR Code</h1>
+              
+              <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+                <h2 className="text-xl font-semibold mb-4">Tambah Siswa</h2>
+                <form onSubmit={handleAddStudent} className="space-y-4">
+                  <input
+                    type="text"
+                    value={newStudent.name}
+                    onChange={(e) => setNewStudent({ ...newStudent, name: e.target.value })}
+                    placeholder="Nama Siswa"
+                    className="w-full p-3 rounded-md border border-gray-300"
+                  />
+                  <select
+                    value={newStudent.classId}
+                    onChange={(e) => setNewStudent({ ...newStudent, classId: e.target.value })}
+                    className="w-full p-3 rounded-md border border-gray-300"
+                  >
+                    <option value="">Pilih Kelas</option>
+                    {classes.map(c => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
+                    ))}
+                  </select>
+                  <button type="submit" className="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 transition-colors">
+                    Tambah Siswa
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <h2 className="text-xl font-semibold mb-4">Daftar Siswa</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kelas</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">QR Code</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {students.map(student => (
+                        <tr key={student.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">{student.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{classes.find(c => c.id === student.classId)?.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className="p-2 border border-dashed rounded-md text-sm font-mono text-gray-600">{student.qrCode}</span>
+                            {/* Di sini bisa ditambahkan tombol download QR Code (simulasi) */}
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onClick={() => setEditStudent(student)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                            <button onClick={() => handleDeleteStudent(student.id)} className="text-red-600 hover:text-red-900">Hapus</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              
+              {/* Modal Edit Siswa */}
+              {editStudent && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+                  <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-lg">
+                    <h2 className="text-2xl font-bold mb-4">Ubah Data Siswa</h2>
+                    <form onSubmit={handleUpdateStudent} className="space-y-4">
+                      <input
+                        type="text"
+                        value={editStudent.name}
+                        onChange={(e) => setEditStudent({ ...editStudent, name: e.target.value })}
+                        placeholder="Nama Siswa"
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      />
+                      <select
+                        value={editStudent.classId}
+                        onChange={(e) => setEditStudent({ ...editStudent, classId: e.target.value })}
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      >
+                        <option value="">Pilih Kelas</option>
+                        {classes.map(c => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
+                      <div className="flex justify-end space-x-4">
+                        <button type="button" onClick={() => setEditStudent(null)} className="py-2 px-4 rounded-md text-gray-600 hover:bg-gray-100">Batal</button>
+                        <button type="submit" className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Simpan</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Kelas View */}
+          {view === 'classes' && (
+            <div>
+              <h1 className="text-3xl font-bold mb-6">Manajemen Kelas</h1>
+              
+              <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+                <h2 className="text-xl font-semibold mb-4">Tambah Kelas</h2>
+                <form onSubmit={handleAddClass} className="space-y-4">
+                  <input
+                    type="text"
+                    value={newClass.name}
+                    onChange={(e) => setNewClass({ ...newClass, name: e.target.value })}
+                    placeholder="Nama Kelas (contoh: Kelas X.1)"
+                    className="w-full p-3 rounded-md border border-gray-300"
+                  />
+                  <button type="submit" className="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 transition-colors">
+                    Tambah Kelas
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <h2 className="text-xl font-semibold mb-4">Daftar Kelas</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Kelas</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {classes.map(c => (
+                        <tr key={c.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">{c.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onClick={() => setEditClass(c)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                            <button onClick={() => handleDeleteClass(c.id)} className="text-red-600 hover:text-red-900">Hapus</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal Edit Kelas */}
+              {editClass && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+                  <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-lg">
+                    <h2 className="text-2xl font-bold mb-4">Ubah Data Kelas</h2>
+                    <form onSubmit={handleUpdateClass} className="space-y-4">
+                      <input
+                        type="text"
+                        value={editClass.name}
+                        onChange={(e) => setEditClass({ ...editClass, name: e.target.value })}
+                        placeholder="Nama Kelas"
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      />
+                      <div className="flex justify-end space-x-4">
+                        <button type="button" onClick={() => setEditClass(null)} className="py-2 px-4 rounded-md text-gray-600 hover:bg-gray-100">Batal</button>
+                        <button type="submit" className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Simpan</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Absensi View */}
+          {view === 'attendance' && (
+            <div>
+              <h1 className="text-3xl font-bold mb-6">Data Absensi</h1>
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama Siswa</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Kelas</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tanggal</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Waktu</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {attendance.map(a => (
+                        <tr key={a.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">{a.studentName}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{classes.find(c => c.id === a.classId)?.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{a.date}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{a.time}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${a.status === 'Hadir' ? 'bg-green-100 text-green-800' : a.status === 'Sakit' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800'}`}>
+                              {a.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onClick={() => setEditAttendance(a)} className="text-indigo-600 hover:text-indigo-900 mr-4">Ubah</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal Ubah Absensi */}
+              {editAttendance && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+                  <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-lg">
+                    <h2 className="text-2xl font-bold mb-4">Ubah Status Absensi</h2>
+                    <form onSubmit={handleUpdateAttendance} className="space-y-4">
+                      <p className="font-semibold">{editAttendance.studentName} ({editAttendance.date})</p>
+                      <select
+                        value={editAttendance.status}
+                        onChange={(e) => setEditAttendance({ ...editAttendance, status: e.target.value })}
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      >
+                        <option value="Hadir">Hadir</option>
+                        <option value="Izin">Izin</option>
+                        <option value="Sakit">Sakit</option>
+                        <option value="Alfa">Alfa</option>
+                      </select>
+                      <div className="flex justify-end space-x-4">
+                        <button type="button" onClick={() => setEditAttendance(null)} className="py-2 px-4 rounded-md text-gray-600 hover:bg-gray-100">Batal</button>
+                        <button type="submit" className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Simpan</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Import Siswa View */}
+          {view === 'import' && (
+            <div>
+              <h1 className="text-3xl font-bold mb-6">Import Siswa dari CSV</h1>
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <p className="mb-4 text-gray-600">
+                  Untuk mengimpor siswa dalam jumlah banyak, siapkan file CSV dengan format berikut:<br />
+                  <code className="bg-gray-100 p-1 rounded-sm text-sm">nama_siswa,id_kelas</code><br />
+                  Contoh: <code className="bg-gray-100 p-1 rounded-sm text-sm">Budi Santoso,X.1</code>
+                </p>
+                <div className="flex space-x-4">
+                  <button onClick={importCSV} className="bg-blue-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-blue-700 transition-colors">
+                    Upload & Import CSV (Simulasi)
+                  </button>
+                  <button onClick={generateReport} className="bg-purple-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-purple-700 transition-colors">
+                    Generate Laporan PDF (Simulasi)
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Manajemen Petugas View (Superadmin only) */}
+          {view === 'staff' && user.role === 'superadmin' && (
+            <div>
+              <h1 className="text-3xl font-bold mb-6">Manajemen Petugas (Superadmin)</h1>
+
+              <div className="bg-white p-6 rounded-xl shadow-lg mb-6">
+                <h2 className="text-xl font-semibold mb-4">Tambah Petugas</h2>
+                <form onSubmit={handleAddStaff} className="space-y-4">
+                  <input
+                    type="text"
+                    value={newStaff.name}
+                    onChange={(e) => setNewStaff({ ...newStaff, name: e.target.value })}
+                    placeholder="Nama Lengkap"
+                    className="w-full p-3 rounded-md border border-gray-300"
+                  />
+                  <input
+                    type="text"
+                    value={newStaff.username}
+                    onChange={(e) => setNewStaff({ ...newStaff, username: e.target.value })}
+                    placeholder="Username"
+                    className="w-full p-3 rounded-md border border-gray-300"
+                  />
+                  <input
+                    type="password"
+                    value={newStaff.password}
+                    onChange={(e) => setNewStaff({ ...newStaff, password: e.target.value })}
+                    placeholder="Password"
+                    className="w-full p-3 rounded-md border border-gray-300"
+                  />
+                  <select
+                    value={newStaff.role}
+                    onChange={(e) => setNewStaff({ ...newStaff, role: e.target.value })}
+                    className="w-full p-3 rounded-md border border-gray-300"
+                  >
+                    <option value="admin">Admin</option>
+                    <option value="superadmin">Superadmin</option>
+                  </select>
+                  <button type="submit" className="bg-green-600 text-white font-semibold py-3 px-6 rounded-md hover:bg-green-700 transition-colors">
+                    Tambah Petugas
+                  </button>
+                </form>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow-lg">
+                <h2 className="text-xl font-semibold mb-4">Daftar Petugas</h2>
+                <div className="overflow-x-auto">
+                  <table className="min-w-full divide-y divide-gray-200">
+                    <thead className="bg-gray-50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Nama</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Username</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Peran</th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="bg-white divide-y divide-gray-200">
+                      {staff.map(s => (
+                        <tr key={s.id}>
+                          <td className="px-6 py-4 whitespace-nowrap">{s.name}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">{s.username}</td>
+                          <td className="px-6 py-4 whitespace-nowrap">
+                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${s.role === 'superadmin' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                              {s.role}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                            <button onClick={() => setEditStaff(s)} className="text-indigo-600 hover:text-indigo-900 mr-4">Edit</button>
+                            <button onClick={() => handleDeleteStaff(s.id)} className="text-red-600 hover:text-red-900">Hapus</button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Modal Edit Petugas */}
+              {editStaff && (
+                <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center p-4">
+                  <div className="bg-white p-8 rounded-xl shadow-xl w-full max-w-lg">
+                    <h2 className="text-2xl font-bold mb-4">Ubah Data Petugas</h2>
+                    <form onSubmit={handleUpdateStaff} className="space-y-4">
+                      <input
+                        type="text"
+                        value={editStaff.name}
+                        onChange={(e) => setEditStaff({ ...editStaff, name: e.target.value })}
+                        placeholder="Nama Lengkap"
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      />
+                      <input
+                        type="text"
+                        value={editStaff.username}
+                        onChange={(e) => setEditStaff({ ...editStaff, username: e.target.value })}
+                        placeholder="Username"
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      />
+                      <input
+                        type="password"
+                        value={editStaff.password}
+                        onChange={(e) => setEditStaff({ ...editStaff, password: e.target.value })}
+                        placeholder="Password"
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      />
+                      <select
+                        value={editStaff.role}
+                        onChange={(e) => setEditStaff({ ...editStaff, role: e.target.value })}
+                        className="w-full p-3 rounded-md border border-gray-300"
+                      >
+                        <option value="admin">Admin</option>
+                        <option value="superadmin">Superadmin</option>
+                      </select>
+                      <div className="flex justify-end space-x-4">
+                        <button type="button" onClick={() => setEditStaff(null)} className="py-2 px-4 rounded-md text-gray-600 hover:bg-gray-100">Batal</button>
+                        <button type="submit" className="bg-blue-600 text-white font-semibold py-2 px-4 rounded-md hover:bg-blue-700">Simpan</button>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <footer className="mt-8 text-center text-sm text-gray-500">
+            <p>Dibuat untuk {schoolData.name}</p>
+            <p>Mata Pelajaran: {schoolData.subject}</p>
+            <p>Tahun Ajaran: {schoolData.academicYear} - Semester: {schoolData.semester}</p>
+          </footer>
+        </main>
+      </div>
+    );
+  };
+
+  return (
+    <div className="App">
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+      `}</style>
+      {renderPage()}
+    </div>
+  );
+};
+
+export default App;
